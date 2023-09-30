@@ -1,0 +1,187 @@
+---
+title: "Homework_DV_1-3"
+author: "Jessie Goldblatt"
+format: html
+embed-resources: true
+editor: visual
+---
+
+## Question 1
+
+I am going to begin by loading the tidyverse package.
+
+```{r}
+#| message: false
+library(tidyverse)
+```
+
+I am now going to read in data related to physical exercise. Note that the exercise variable is measured in minutes and BMI is centered so that the average is 0 and the units represent standard deviations around 0.
+
+```{r}
+#| message: false
+exercise_data <- read_csv("https://raw.githubusercontent.com/vaiseys/dav-course/main/Data/visualize_data.csv")
+glimpse(exercise_data)
+```
+
+My prediction is that people who record more exercise will have a lower BMI. In other words, there will be a negative correlation between the two variables.
+
+I am now going to calculate the correlation coefficient between these two variables using the `cor()` function, as instructed.
+
+```{r}
+cor(exercise_data$Exercise, exercise_data$BMI)
+```
+
+The output of -.06 indicates that there is a small negative correlation between exercise and BMI.
+
+Next, I am going to explore this relationship visually.
+
+```{r}
+ggplot(exercise_data, aes(x = Exercise, y = BMI)) +
+  geom_point() +
+  theme_bw()
+```
+
+The scatter plot above displays a dinosaur rather than an actual, meaningful relationship between the two variables. This output is a testament to why it is so important to always visualize data.
+
+## Question 2
+
+I am now going to load `causact`, a package that contains information on the human development index (HDI) and corruption perceptions index (CPI) in various countries in 2017. I am also going to glimpse the data set.
+
+```{r}
+#| message: false
+library(causact)
+data(corruptDF)
+glimpse(corruptDF)
+```
+
+Note that the variable `CPI2017` captures perceptions of corruption within the public sector in the year 2017. A score of 0 indicates that a country's public sector is extremely corrupt, while a score of 100 indicates a country's public sector is virtually void of corruption.
+
+Moreover, note that the variable `HDI2017` captures several key dimensions related to human development for the year 2017. The value is calculated via an average of a country's longevity, education and income and is measured on a scale of 0 to 1.0 (where 1.0 represents very high human development and anything below 0.55 represents low human development).
+
+## Question 3
+
+I am interested in the relationship between the CPI and the HDI. As such, I am going to make a scatter plot showing the relationship between the two variables.
+
+```{r}
+ggplot(corruptDF, aes(x = CPI2017, y = HDI2017)) +
+  geom_point() +
+  theme_bw() + 
+  labs(x= "Corruption Perceptions Index (CPI)", y = "Human Development Index (HDI)",
+       title = "Relationship Between CPI And HDI In 2017",
+       subtitle = "Data Points are Countries",
+       caption = "Sources: Transparency International and United Nations Development Programme")
+```
+
+At first glance, it appears that there is a strong positive correlation between HDI and CPI. As CPI scores increase, HDI scores also tend to increase. However, it is important to note what this correlation actually means.
+
+Recall that CPI is reverse scaled - a high CPI score (i.e., a score of 100) means that a country has low perceived corruption. As such, this suggests that countries that are perceived as less corrupt tend to have higher human development. In other words, as perceived corruption decreases, human development increases. Accordingly, what this plot really shows is that perceived corruption and human development are negatively correlated.
+
+## Question 4
+
+Now, I am going to add a layer that captures the overall relationship between these two variables using `geom_smooth()`. I am going to use the linear model (`lm`) method.
+
+```{r}
+ggplot(corruptDF, aes(x = CPI2017, y = HDI2017)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x= "Corruption Perceptions Index (CPI)", y = "Human Development Index (HDI)",
+       title = "Relationship Between CPI And HDI In 2017 (Linear Model)",
+       subtitle = "Data Points are Countries",
+       caption = "Sources: Transparency International and United Nations Development Programme")
+```
+
+Once again, I am going to use `geom_smooth()` to capture the overall relationship between these two variables. However, this time I am going to use the generalized additive model (`gam`) method.
+
+```{r}
+ggplot(corruptDF, aes(x = CPI2017, y = HDI2017)) +
+  geom_point() +
+  geom_smooth(method = "gam", se = FALSE) +
+  theme_bw() + 
+  labs(x= "Corruption Perceptions Index (CPI)", y = "Human Development Index (HDI)",
+       title = "Relationship Between CPI And HDI In 2017 (Generalized Additive Model)",
+       subtitle = "Data Points are Countries",
+       caption = "Sources: Transparency International and United Nations Development Programme")
+```
+
+While the linear model and generalized additive model are similar, they have a few key differences.
+
+1.  The linear model assumes that the relationship between HDI and CPI is linear. By contrast, the generalized additive model accounts for other non-linear data patterns.
+2.  Visually, the linear model displays a straight line, while the generalized additive model appears as a straight line that eventually curves downward.
+
+While the linear model is more straightforward and easy to interpret, it overlooks complexities and nuances within the data. As such, I prefer the generalized additive model over the linear model.
+
+## Question 5
+
+I would like to explore if the relationship between CPI and HDI varies by region. As such, I am going to add a fill and color aesthetic to the graph so that the lines and points are grouped by the variable `region`.
+
+```{r}
+ggplot(corruptDF, aes(x = CPI2017, 
+                      y = HDI2017,
+                      color = region,
+                      fill = region)) +
+  geom_point() +
+  geom_smooth(method = "gam", , se = FALSE) +
+  theme_bw()
+```
+
+Overall, it appears that as CPI scores increase, HDI scores also tend to increase. However, the strength and model type varies by region. For example, while there is a linear positive correlation between CPI and HDI in both EU W. Europe and the Americas, the correlation is stronger for the Americas. Moreover, the correlation between CPI and HDI in the Middle East/North Asia (MENA) and Sub-Saharan Africa (SSA) is generally positive, but the model is not exactly linear.
+
+On the whole, the trends from the graph are very cluttered and unclear. As such, a more legible way to display trends would be to use the `facet_wrap()` function with `region` as the argument.
+
+```{r}
+ggplot(corruptDF, aes(x = CPI2017, 
+                      y = HDI2017,
+                      color = region,
+                      fill = region)) +
+  geom_point() +
+  facet_wrap(~region) +
+  geom_smooth(method = "gam", , se = FALSE) +
+  theme_bw()
+```
+
+## Question 6
+
+Now, I am going to reverse the scale of the x-axis using the `scale_x_reverse` function that Healy provides in the `where to go next` section of chapter 3. This will help to reflect what I mentioned in Question 3 - that perceived corruption and human development are negatively correlated.
+
+```{r}
+ggplot(corruptDF, aes(x = CPI2017, 
+                      y = HDI2017,
+                      color = region,
+                      fill = region)) +
+  geom_point() +
+  facet_wrap(~region) +
+  geom_smooth(method = "gam", , se = FALSE) +
+  theme_bw() +
+  scale_x_reverse()
+```
+
+## Question 7
+
+Next, I am going to add a title and a subtitle to the plot. I have also added a caption to indicate where the data is coming from.
+
+```{r}
+ggplot(corruptDF, aes(x = CPI2017, 
+                      y = HDI2017,
+                      color = region,
+                      fill = region)) +
+  geom_point() + 
+  facet_wrap(~region) +
+  geom_smooth(method = "gam", , se = FALSE) +
+  theme_bw() +
+  scale_x_reverse() + 
+  labs(x= "Corruption Perceptions Index (CPI)", y = "Human Development Index (HDI)",
+       color = "Region",
+       fill = "Region",
+       title = "Relationship Between CPI And HDI By Region In 2017",
+       subtitle = "Data Points are Countries",
+       caption = "Sources: Transparency International and United Nations Development Programme")
+```
+
+## Question 8
+
+Now that my plot about the relationship between the corruption perception index and the human development index is informative and sleek, I want to save it. I am going to execute the following code to save the plot.
+
+```{r}
+ggsave(filename = "CPI_HDI_Scatterplot.png")
+```
