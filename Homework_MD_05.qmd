@@ -1,0 +1,259 @@
+---
+title: "Homework MD 05"
+author: "Jessie Goldblatt"
+format: html
+embed-resources: true
+editor: visual
+---
+
+## Setting Up
+
+I am going to begin by loading in the `tidyverse`, `moderndive`, and `broom` packages.
+
+```{r}
+#| message: false
+library(tidyverse)
+library(moderndive)
+library(broom)
+```
+
+I am also going to read in data on twitch streamers.
+
+```{r}
+#| message: false
+twitch_data <- read_csv("https://raw.githubusercontent.com/vaiseys/dav-course/main/Data/twitchdata-update.csv")
+```
+
+Next, I am going to load in the `janitor` package and clean the names of the variables in the `twitch_data` data frame.
+
+```{r}
+library(janitor)
+twitch_data <- clean_names(twitch_data)
+
+# Inspect new names
+#| message: false
+colnames(twitch_data)
+```
+
+## Question 1
+
+I am going to examine whether the [number of followers]{.underline} that a streamer has is predictive of the [average viewers]{.underline} they get. I am going to display the `average_viewers` and the `followers` for five random streamers.
+
+```{r}
+twitch_data %>%
+  select(average_viewers, followers) %>%
+  sample_n(size = 5)
+```
+
+I notice that the average number of viewers greatly varies among twitch channels, with some channels receiving average viewership in the low thousands and other channels receiving over 10,000 viewers on average. The number of followers also greatly varies among streamers, ranging from less than 100k to upwards of over 200k. Finally, from first glance, it appears that those with large average viewership often have a high amount of followers.
+
+I am going to `select` the two variables of interest, `average_viewers` and `followers`, and run `summary()` to get summary statistics about them.
+
+```{r}
+summary_twitch_data <- twitch_data %>%
+  select(average_viewers, followers) 
+
+summary(summary_twitch_data)
+```
+
+The majority (middle 50%) of twitch streamers have an average viewer amount between 1458 and 4786, with the median average viewer amount being 2425. That being said, twitch streamers can have upwards of over 145k viewers on average and as low as 235 viewers on average. Note also that the mean is greater than the median, meaning the distribution of average viewership is right skewed (most streamers have a lower amount of average viewers, but a few extremely high values pull the mean higher).
+
+Regarding followers, the majority (middle 50%) of twitch streamers have a follower amount between 171k and 624k, with the median follower amount being 318k. That being said, twitch streamers can have upwards of over 8.9M followers and as low as 3.6k followers. Note that, as was the case for average viewership, the mean is greater than the median, meaning the distribution of followers is right skewed (most of the data points are clustered in a lower range of values, but a few extremely high values pull the mean up).
+
+Now, I am going to visualize the two variables of interst using a scatterplot.
+
+```{r}
+ggplot(twitch_data, aes(x = average_viewers, y = followers)) +
+  geom_jitter(alpha = .1) +
+  theme_minimal() +
+  labs(x = "Average Viewers", 
+       y = "Followers",
+       title = "Scatterplot Of Relationship Between Average Viewers and Followers")
+```
+
+I notice that the overwhelming majority of the data is clustered near the origin. That is, most streamers have less than 10k viewers on average and less than 1.25M followers on average. That being said, there are a couple extreme outliers with a ton of viewers (\> 100k) or a ton of followers (\> 5M).
+
+I am going to transform the data so that it is not packed into such a small part of the Cartesian plane. Indeed, I am going to create the same plot but add `scale_x_log10` and `scale_y_log10`.
+
+```{r}
+ggplot(twitch_data, aes(x = average_viewers, y = followers)) +
+  geom_jitter(alpha = .3) +
+  theme_minimal() +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(x = "Average Viewers (log transformed)", 
+       y = "Followers (log transformed)",
+       title = "Scatterplot Of Relationship Between Average Viewers and Followers")
+```
+
+Now, it appears that there is a positive correlation between the average number of viewers and the number of followers twitch streamers have. That is, as the average number of viewers that a streamer has increases, the number of followers they have also tends to increase.
+
+Finally, I am going to add the log transformed variables to my dataset, using the code given in the instructions.
+
+```{r}
+twitch_data <- twitch_data %>% 
+  mutate(log_viewers = log10(average_viewers), 
+         log_followers = log10(followers))
+```
+
+## Question 2
+
+Using the `lm()` function, I am going to run a regression where I predict the logarithm of average viewers (`log_viewers`) using the logarithm of followers (`log_followers`). I am going to save the results to an object called `fit1`.
+
+```{r}
+#Fit regression model
+fit1 <- lm(log_viewers ~ log_followers, 
+                  data = twitch_data)
+
+#Get regression table
+get_regression_table(fit1)
+```
+
+Now, I am going to again get a summary of my model, only this time I am going to use the `broom` package and `tidy()` function instead of `get_regression_table()`.
+
+```{r}
+broom::tidy(fit1)
+```
+
+The instructions explain how when using log transformations, the coefficients should be interpreted as percentage increases. I am going to run the code given in the instructions to determine what a 10% increase in followers corresponds to. The 0.588 value I have inserted into the formula comes from the table above.
+
+```{r}
+1.1^{0.588}
+```
+
+A 10% increase in followers is associated with a 5.8% increase in the average number of viewers.
+
+## Question 3
+
+I am going to begin by running the code given in the instructions that uses the `augment` function, which adds columns to the data frame about the regression model (i.e., .resid, or residual information).
+
+```{r}
+pred_data <- augment(fit1)
+
+# glimpse our new data 
+glimpse(pred_data)
+```
+
+Now I am going to look at the line of best fit and check the residuals.
+
+```{r}
+pred_data %>% 
+  ggplot(aes(x = log_followers, 
+             y = log_viewers)) +
+  geom_jitter(alpha = 0.4) + 
+  geom_line(aes(x = log_followers, 
+                y = .fitted), 
+            col = "orange") + 
+  theme_minimal() +
+  labs(subtitle = "Fitted Model and Raw Data", 
+       title = "Followers & Average Viewership", 
+       x = "log(followers)", 
+       y = "log(viewers)")
+```
+
+It seems like the linear model describes the relationship between followers and average viewership well; the majority of points consistently fall on or near the line of best fit.
+
+Now, I am going to fit a plot where `log_followers` is on the x-axis and `.resid` is on the y-axis.
+
+```{r}
+pred_data %>% 
+  ggplot(aes(x = log_followers, 
+             y = .resid)) +
+  geom_jitter(alpha = 0.4) + 
+  geom_smooth(method = "lm", se = FALSE, col = "orange") + 
+  theme_minimal() +
+  labs(title = "Residuals Plot of log(followers)", 
+       x = "log(followers)", 
+       y = "Residuals")
+```
+
+This plot indicates that my model from earlier (titled "Followers & Average Viewership") does a decent job of predicting the amount of followers a twitch streamer has. The difference between the expected number of followers and actual number of followers that a twitch streamer has is often near 0 (between -0.5 and 0.5).
+
+While most residuals are minimal, there are a few residuals that are big. For example, one twitch streamer with a `log(followers)` value of 4 (actual followers amount of around 10\^4, or 10k) has a residual value over 1. In other words, the difference between the expected amount of followers and the actual amount of followers that streamer has is quite large.
+
+That being said, the big residuals are limited in number and do not happen often in a particular range of our x-variable, meaning this model does not systematically fail to predict part of the data and thus can be largely reliable.
+
+## Question 4
+
+I am interested in whether `language` predicts `average_viewers`. This would give me an indication of where the most popular twitch channels come from.
+
+I am going to begin by exploring the raw data.
+
+```{r}
+twitch_data %>% 
+group_by(language) %>% 
+  summarize(count = n()) %>% 
+   arrange(desc(count))
+```
+
+It appears that the most common language for twitch streamers is English, followed by Korean and Russian. By contrast, the least common languages for twitch streamers are Finnish, Greek, Slovak, and Swedish.
+
+Next, I am going to summarize my variables of interest.
+
+```{r}
+summary2_twitch_data <- twitch_data %>%
+    select(average_viewers, language)
+
+summary(summary2_twitch_data)
+```
+
+It appears that most twitch streamers have between 1458 and 4786 viewers on average. That being said, they may have as many as 147,643 and as few as 235 viewers on average. Moreover, the summary statistics confirm that `language` is indeed a categorical variable for which there are 1000 observations (aka streamers).
+
+Finally, I am going to plot the relationship between the two variables (`language` and `log_viewers`). Note that I am going to be using the log transformed version of average viewership to make the results easier to see.
+
+```{r}
+ggplot(twitch_data, aes(x = log_viewers, y = reorder(language, -log_viewers))) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = .1) +
+  theme_minimal() +
+  labs(x = "Average Viewers (log transformed)", 
+       y = "Language",
+       title = "Average Viewers By Language")
+```
+
+The plot reveals that Spanish and Arabic speaking streamers have the most viewers on average. By contrast, Thai and Czech streamers have the fewest viewers on average (aside from those languages that only have 1-2 observations such as Swedish and Finnish). It is also clear that, across languages, there is a wide and varied distribution of average viewership.
+
+## Question 5
+
+I am going to begin by setting `English` as my reference category, as directed in the instructions.
+
+```{r}
+twitch_data <- twitch_data %>% 
+  mutate(language = as.factor(language), 
+         language = relevel(language, ref = "English"))
+```
+
+Next, I am going to run a regression where I predict average viewership (`average_viewers`) using language (`language`). I am going to save the results to an object called `fit2`.
+
+```{r}
+fit2 <- lm(average_viewers ~ language, 
+                  data = twitch_data)
+
+#Get regression table
+broom::tidy(fit2)
+```
+
+The output reveals that Arabic speaking streamers have 569 more average viewers than English speaking streamers. Moreover, Russian speaking streamers have 1481 more average viewers than English speaking streamers. As such, the prediction that English speaking streamers would have the most average viewers and be the most popular is incorrect.
+
+## Question 6
+
+I am now going to explore the residuals using a similar plot as I did in Question 3.
+
+```{r}
+pred_data2 <- augment(fit2)
+
+pred_data2 %>% 
+  ggplot(aes(x = average_viewers, 
+             y = .resid)) +
+  geom_jitter(alpha = 0.15) + 
+  geom_line(aes(x = average_viewers, 
+                y = .fitted), 
+            col = "orange") + 
+  theme_minimal() +
+  scale_x_log10() +
+  labs(title = "Residuals Plot of Average Viewership", 
+       x = "Average Viewership (log transformed)", 
+       y = "Residuals")
+```
+
+There are a couple of points our model really missed. Virtually any streamer who had more than 31k (1e+04.5) average viewers had a large residual value. That is, the difference between the expected amount of average viewers and actual amount of average viewers could be off by around 25k - or upwards of over 100k for those streamers with especially high average viewership.
