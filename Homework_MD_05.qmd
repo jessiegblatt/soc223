@@ -27,11 +27,10 @@ twitch_data <- read_csv("https://raw.githubusercontent.com/vaiseys/dav-course/ma
 Next, I am going to load in the `janitor` package and clean the names of the variables in the `twitch_data` data frame.
 
 ```{r}
+#| message: false
 library(janitor)
 twitch_data <- clean_names(twitch_data)
 
-# Inspect new names
-#| message: false
 colnames(twitch_data)
 ```
 
