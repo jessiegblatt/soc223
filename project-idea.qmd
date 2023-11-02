@@ -1,0 +1,24 @@
+---
+title: "Project Idea"
+author: "Jessie Goldblatt"
+format: html
+editor: visual
+---
+
+## Project Idea
+
+This data set (<https://www.kaggle.com/datasets/nelgiriyewithana/top-spotify-songs-2023/data>) contains information on the most streamed Spotify songs in the year 2023. I would like to investigate the following research question: **what musical attributes (e.g., tempo, key, danceability, valence, instrumentals percentage) predict the popularity (ranking and/or streams) of a song on Spotify?**
+
+## Back-Up Research Questions
+
+I have two back-up research questions. These include:
+
+-   Given that the songs streamed in 2023 were released in various years, are there any trends or differences in the musical attributes (e.g., tempo, key, danceability, valence, instrumentals percentage) of songs across time?
+
+-   Does popularity on one streaming platform (e.g., Spotify) predict popularity on other music and streaming platforms (e.g., Apple, Deezer, Shazam)?
+
+## Discussion with Classmates
+
+[Kristy]{.underline}: She is thinking about using a finance-related data set for her final project.
+
+[Thomas]{.underline}: He is thinking about using Jeopardy game show data for his final project.
