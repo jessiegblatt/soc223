@@ -1,0 +1,760 @@
+---
+format: html
+embed-resources: true
+editor: visual
+echo: false
+---
+
+::: {style="font-family: Georgia, serif;"}
+# In Tune with the Times: Musical Elements Predictive of Song Popularity in 2023
+
+By: Jessie Goldblatt
+:::
+
+```{r}
+#| message: false
+#loading packages
+library(tidyverse)
+library(showtext)
+library(knitr)
+library(readxl)
+library(moderndive)
+library(ggeffects)
+library(grid)
+library(gridExtra)
+
+#loading fonts
+font_add("Gotham Light", regular = "~/Desktop/soc223/Gotham-Light.otf")
+font_add("Gotham Bold", regular = "~/Desktop/soc223/Gotham-Bold.otf")
+font_add("Gotham Medium", regular = "~/Desktop/soc223/GothamMedium.ttf")
+showtext_auto()
+
+#loading custom color palette
+colors2 <- c("#cdf564", "#f037a5")
+```
+
+```{r}
+#| message: false
+#read in and glimpse Spotify data
+spotify <- readxl::read_excel("~/Desktop/soc223/spotify-2023_excel.xlsx")
+#glimpse(spotify_2023)
+```
+
+```{r}
+#selecting potential variables of interest
+selspotify <- spotify %>% 
+  select(c(1, artist_count, released_month, in_spotify_playlists, in_spotify_charts, streams, bpm, mode, key, 15:24)) 
+
+#renaming variables
+selspotify <- selspotify %>% 
+  rename(song = `track_name`,
+         danceability = `danceability_%`,
+         valence = `valence_%`,
+         energy = `energy_%`,
+         acousticness = `acousticness_%`,
+         instrumentalness = `instrumentalness_%`,
+         liveness = `liveness_%`,
+         speechiness = `speechiness_%`)
+```
+
+```{r}
+#cleaning up streams by removing row with data entry error
+selspotify2 <- selspotify[grepl("^\\d+$", selspotify$streams), ]
+
+#converting to a numeric variable
+selspotify2$streams <- as.numeric(as.character(selspotify2$streams)) 
+
+#making a new log version of streams
+selspotify2 <- selspotify2 %>% 
+  mutate(log_streams = log10(streams))
+
+#filtering so that only have songs with more than 20M streams
+selspotify2 <- selspotify2 %>% 
+  filter(streams >= 20000000)
+
+#moving log streams next to regular streams
+selspotify2 <- selspotify2[, c(1, 6, 17, 10, 3:5, 7:9, 11:16)]
+```
+
+```{r}
+#making a new data set for my actual variables of interest 
+selspotify3 <- selspotify2 %>% 
+  select(1:4, 9:10) %>% 
+  rename(exactkey = `key`,
+         key = `mode`)
+```
+
+::: {style="font-family: Georgia, serif;"}
+# 1. Introduction
+
+In the age of digitalization, any artist has the potential to create a song that becomes an overnight sensation. This study aims to better understand the musical elements that influence a song's popularity in 2023. Ultimately, we hope such insights can inform the musical decisions of artists hoping to grow.
+
+Popularity can be operationalized as streams, or the number of times a song is played for 30 seconds or more. Our study explores whether factors such as the danceability or key of a song are related to its popularity, as measured by the number of streams the song receives. 
+
+For our investigation, we used a data set from Kaggle that contained information on the most streamed Spotify songs in 2023. The data was last updated in August of 2023. Each row in the data set represented a song, and there were 953 rows, or songs, in total.
+
+Our model had two explanatory variables: key (major/minor) and danceability (how suitable a song is for dancing on a scale of 0-100% based on its tempo, rhythm stability, beat strength, and overall regularity). Our outcome variable was streams, and it was log transformed to reduce skewness and improve the prediction accuracy of our model.
+
+Below is a look at 5 randomly chosen rows of the data set we will be using:
+:::
+
+```{r}
+#selecting five rows at random
+five_random <- selspotify3 %>%
+  select(1:5)  %>%
+  mutate(streams = sprintf("%.1fM", streams / 1e6)) %>%
+  sample_n(size = 5)
+
+
+kable(five_random, format = "html") 
+```
+
+::: {style="font-family: Georgia, serif;"}
+# 2. Exploratory Data Analysis
+
+We had an original sample size of 953 songs. However, row #575 of the data set was missing streams data. As such, we eliminated it. There were also a few songs with minimal streams (i.e., 2k, 1M) relative to the rest of the songs. Accordingly, we filtered the data to only include songs with 20M streams or more, what we considered to be a legitimate threshold of popularity. In the end, our final sample size was 946 songs.
+
+Before conducting any analyses, we visualized the distributions of each of our explanatory variables (Figure 1). We found that the songs in our data set had danceability scores ranging from 23% to 96%, with many songs having a danceability score around 67%. Regarding key, 545 were written in the major key, and 401 were written in the minor key.
+:::
+
+```{r}
+#summary stats of danceability
+summarydance <- selspotify3 %>% 
+  summarize(
+    count = n(),
+    mean = mean(danceability),
+    median = median(danceability),
+    sd = sd(danceability),
+    min = min(danceability),
+    max = max(danceability),
+   ) 
+#summarydance
+```
+
+```{r}
+#visualizing distribution of predictor #1: danceability
+danceability_breaks <- pretty(
+  selspotify3$danceability,                  
+  nclass.Sturges(selspotify3$danceability))  
+
+danceability_dist <- ggplot(selspotify3, 
+       aes(x = danceability)) +
+  geom_histogram(breaks = danceability_breaks, 
+                 color = "white", 
+                 fill = "#1ed760") +
+  theme_minimal() + 
+  labs(x= "Danceability",
+     y = "Count") +
+  theme(text = element_text(family = "Gotham Bold", size = 11)) 
+```
+
+```{r}
+#visualizing distribution of predictor #2: key
+key_dist <- ggplot(selspotify3, aes(x = key)) +
+  geom_bar(color = "white", fill = "#1ed760") +
+  theme_minimal() + 
+  labs(x= "Key",
+     y = "Count") +
+   theme(text = element_text(family = "Gotham Bold", size = 11))
+```
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 1. Distributions of explanatory variables: danceability (left) and key (right).**
+:::
+
+```{r}
+#arranging distribution plots next to each other
+arranged_plots <- 
+  grid.arrange(danceability_dist, key_dist, 
+               nrow = 1)
+```
+
+::: {style="font-family: Georgia, serif;"}
+In addition to exploring the distributions of our explanatory variables, we investigated the distribution of streams, our outcome variable. As of August, the top streamed songs in 2023 had as few as 22.6M streams to as many as 3.70B streams (Table 1). The typical, median number of streams for songs written in a major key was 304M, with a variation, or standard deviation, of 578M streams. Regarding songs written in a minor key, the median number of streams was 276M, with a standard deviation of 551M streams.
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Table 1. Summary statistics of stream counts by key for top streamed Spotify songs in 2023.**
+:::
+
+```{r}
+#group by key 
+#get summary stats (in millions) by key
+summaryspot <- selspotify3 %>% 
+  group_by(key) %>% 
+  summarize(
+    count = n(),
+    mean = sprintf("%.1fM", mean(streams) / 1e6),
+    median = sprintf("%.1fM", median(streams) / 1e6),
+    sd = sprintf("%.1fM", sd(streams) / 1e6),
+    min = sprintf("%.1fM", min(streams) / 1e6),
+    max = sprintf("%.1fM", max(streams) / 1e6),
+   ) 
+#making the tibble look nice
+kable(summaryspot, format = "html", align = "c")
+```
+
+```{r, include=FALSE}
+#NOT INCLUDING
+#same thing as above (group by key + summarize) but log transformed
+summaryspot <- selspotify3 %>% 
+  group_by(key) %>% 
+  summarize(
+    count = n(),
+    mean = mean(log_streams),
+    median = median(log_streams),
+    sd = sd(log_streams),
+    min = min(log_streams),
+    max = max(log_streams),
+   ) 
+
+#rounding to the fourth decimal
+summaryspot <- summaryspot %>%
+  mutate(across(where(is.numeric), ~ round(., 4)))
+
+#making the tibble look nice
+kable(summaryspot, format = "html", align = "c")
+```
+
+::: {style="font-family: Georgia, serif;"}
+In visualizing the distribution of streams, it was clear that most values were concentrated on the left (Figure 2). As such, we applied a log transformation to the streams variable to reduce skewness (Figure 3). In our analyses going forward, we will use only the log transformed version of streams. 
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 2. Distribution of stream counts for top streamed Spotify songs in 2023.**
+:::
+
+```{r}
+#distribution of streams (not log transformed) 
+streams_breaks <- pretty(
+  selspotify3$streams,                  
+  nclass.Sturges(selspotify3$streams))  
+
+streams_dist <- ggplot(selspotify3, 
+       aes(x = streams)) +
+  geom_histogram(breaks = streams_breaks, 
+                 color = "white", 
+                 fill = "#1ed760") +
+  theme_minimal() + 
+  labs(x= "Streams",
+     y = "Count") +
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+streams_dist
+```
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 3. Log transformed distribution of stream counts for top streamed Spotify songs in 2023.**
+:::
+
+```{r}
+#distribution of streams (log transformed) 
+log_streams_breaks <- pretty(
+  selspotify3$log_streams,                  
+  nclass.Sturges(selspotify3$log_streams))  
+
+log_streams_dist <- ggplot(selspotify3, 
+       aes(x = log_streams)) +
+  geom_histogram(breaks = log_streams_breaks, 
+                 color = "white", 
+                 fill = "#1ed760") +
+  theme_minimal() + 
+  labs(x= "Streams (log transformed)",
+     y = "Count") +
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+log_streams_dist
+```
+
+::: {style="font-family: Georgia, serif;"}
+Next, we created a scatterplot to visualize the relationship between our numerical explanatory variable, danceability, and our outcome variable, streams (Figure 4). Recall that danceability refers to how suitable a song is for dancing based on its tempo, rhythm stability, beat strength, and overall regularity, and this metric ranges from 0% (minimal score) to 100% (maximal score). Figure 4 shows that as the danceability of a song increases, there is a very slight associated decrease in the number of streams the song receives. This relationship is corroborated by the small, negative correlation coefficient of -0.074.
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 4. Scatterplot of relationship between streams (log transformed) and danceability.**
+:::
+
+```{r warning=FALSE, message=FALSE}
+#relationship btwn streams and danceability using scatter plot
+ggplot(selspotify3,
+       aes(x = danceability, 
+             y = log_streams)) +
+  geom_jitter(alpha = 0.4, col = "#535353") +
+  geom_smooth(method = "lm",se = FALSE, col = "#1ed760") + 
+  theme_minimal() +
+  labs(x = "Danceability (as a %)", 
+       y = "Streams (log transformed)") +
+  theme(text = element_text(family = "Gotham Bold", size = 12)) 
+```
+
+```{r, include=FALSE}
+#numerical correlation coefficient
+selspotify3 %>% 
+  select(danceability, log_streams) %>% 
+  cor()
+```
+
+::: {style="font-family: Georgia, serif;"}
+We also generated a boxplot to illustrate the relationship between our categorical explanatory variable, key, and our numerical outcome variable, streams (Figure 5). It appears that songs written in a major key had more streams than songs written in a minor key, although this difference was slight. Additionally, songs written in a major key had a higher maximum number of streams than songs written in a minor key, while the minimum streams count for songs in the major key was not as low as that of minor key songs.
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 5. Boxplot of relationship between streams (log transformed) and key.**
+:::
+
+```{r}
+#relationship btwn streams and key using box plot 
+ggplot(selspotify3, 
+       aes(x = key, y = log_streams, fill = key)) +
+  geom_boxplot(show.legend = FALSE) +
+  scale_fill_manual(values = colors2) +
+  labs(x = "Key", 
+       y = "Streams (log transformed)") +
+  theme_minimal() +
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+```
+
+::: {style="font-family: Georgia, serif;"}
+Lastly, we created a scatterplot to display the relationship between all three variables simultaneously. As can be seen in Figure 6, it appears that the slopes of the lines corresponding to each key were quite different. At lower danceability levels, songs written in the major key seemed to have more streams than songs written in the minor key. However, at higher danceability levels, these lines converged, with the major key line actually dipping slightly below that of the minor key. This suggests that songs written in the minor key perform better and receive more streams than songs written in the major key at higher danceability levels. Given that the lines representing each key intersect and that there is a potential interaction, we will use an interaction model for our regression analysis.
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 6. Scatterplot of relationship between streams (log transformed) and both danceability and key.**
+:::
+
+```{r warning=FALSE, message=FALSE}
+#relationship between streams and both danceability and key
+ggplot(selspotify3,
+       aes(x = danceability, 
+           y = log_streams,
+           group = key,
+           color = key)) +
+  geom_jitter(alpha = 0.3) +
+  geom_smooth(method = "lm", se = FALSE) + 
+  scale_color_manual(values = colors2) +
+  theme_minimal() +
+  labs(x = "Danceability (as a %)", 
+       y = "Streams (log transformed)",
+       color = "Key") +
+  theme(text = element_text(family = "Gotham Bold", size = 12)) 
+```
+
+::: {style="font-family: Georgia, serif;"}
+# 3. Multiple Linear Regression
+
+## 3.1 Methods
+
+Our regression model had the following elements:
+
+-   Outcome variable = Streams (log transformed)
+-   Numerical explanatory variable x~1~ = Danceability
+-   Categorical explanatory variable x~2~ = Key
+
+We opted for an interaction model because the relationship between streams, danceability, and key seemed to vary at different levels of each variable, as was evidenced by the intersecting lines in Figure 5. We also confirmed that a linear interaction model was the best fit in testing various model specifications and comparing them a) visually and b) using AIC scores (see Appendix for model comparisons).
+:::
+
+::: {style="font-family: Georgia, serif;"}
+## 3.2 Model Results
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Table 2. Regression table for interaction model of streams (log transformed) as a function of danceability and key.**
+:::
+
+```{r}
+#Fit regression model
+int_lin_model <- lm(log_streams ~ danceability * key, data = selspotify3)
+
+#Get regression table
+tidy_output <-broom::tidy(int_lin_model, conf.int = TRUE)
+
+kable(tidy_output, format = "html", align = "c") 
+```
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 7. Visualization of linear interaction model with streams (log transformed) as a function of danceability and key.**
+:::
+
+```{r warning=FALSE, message=FALSE}
+m3 <- ggpredict(int_lin_model,
+          terms = c("danceability", "key")) 
+
+vis_interaction_model <- plot(m3) +
+  labs(x = "Danceability",
+       y = "Streams (log transformed)",
+       fill= "Key",
+       color = "Key",
+       title = "") +
+  scale_fill_manual(values = colors2) +
+  scale_color_manual(values = colors2) +
+  theme_minimal() + 
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+
+vis_interaction_model
+```
+
+::: {style="font-family: Georgia, serif;"}
+## 3.3 Interpreting the Regression Table
+
+The regression equation for Spotify streams (log transformed) is as follows:
+
+$$
+\widehat{streams} = b_0 + b_{{danceability}}*danceability+ b_{{minor}} * 1_{{isminor}} x + b_{{danceability, minor}} *danceability * 1_{{isminor}} x
+$$
+
+::: {style="font-family: Georgia, serif;"}
+$$
+= 8.7540106 - 0.0037833 *danceability - 0.3365218 * 1_{{isminor}} x + 0.0043269 *danceability * 1_{{isminor}} x
+$$
+:::
+:::
+
+::: {style="font-family: Georgia, serif;"}
+-   b~0~ (8.7540106) is the **intercept for songs in the major key**, or the amount of streams (log transformed) a song receives when it has a danceability score of 0 and the key is major. When un-log transformed, this amount is the equivalent of 567.5M streams.
+
+-   b~danceability~ (- 0.0037833) is the **slope for danceability** **for songs in the major key**. That is, for every one percentage point increase in danceability for songs in the major key, there was an associated decrease in streams (log transformed) of on average .0037 (a 0.3% decrease when un-log transformed).
+
+-   b~minor~ (-0.3365218) is the **offset in intercept for songs in the minor key** compared to the intercept of the baseline group, or songs in the major key. This means that, on average, minor key songs with a danceability score of 0 had 0.3365 fewer streams (log transformed) than songs written in the major key. The intercept for the minor key is the equivalent of 261.5M streams when un-log transformed.
+
+-   b~danceability,minor~ (0.0043269) is the **offset in slope for danceability** **for songs in the minor key**. For every one percentage point increase in danceability for songs in the minor key, there was a +0.004 greater associated difference in streams (log transformed) compared to songs in the major key. When un-log transformed, this means that for every one percentage point increase in danceability for songs in the minor key, there was an associated 0.05% increase in streams.
+
+To summarize, the two regression lines have the following equations:
+
+-   [Major key]{.underline}: 8.7540106 - 0.0037833\* danceability
+-   [Minor key]{.underline}: 8.4174888 + 0.0005439\*danceability
+:::
+
+::: {style="font-family: Georgia, serif;"}
+## 3.4 Inference for Multiple Regression
+
+We will now test several different hypotheses using the output from the interaction model above.
+
+The first null hypothesis is that there is no relationship between danceability and streams for a song in the baseline group (major key).
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center;"}
+H~0~: β~danceability~ = 0
+
+H~A~: β~danceability~ ≠ 0
+:::
+
+::: {style="font-family: Georgia, serif;"}
+According to the regression model, there is a slight negative relationship between danceability and streams for songs written in the major key (β~danceability~ =  - 0.003783). Table 2 shows that this is a legitimate relationship, given that:
+
+-   The 95% confidence interval for the β~danceability~ slope is completely negative \[-0.0063380, -0.0012286\]. This suggests that for every one percentage point increase in danceability for songs written in the major key, there is an associated decrease of as many as 0.0063 streams (log transformed) or as few as 0.0012 streams (log transformed). Note that this is the equivalent of anywhere from a 0.1% to 0.6% decrease in streams when un-log transformed.
+
+-   The small p-value (p = 0.0037) indicates that there is a low probability of having obtained results just as or more extreme as these if the null hypothesis were true. As such, we reject the null hypothesis H~0~ that β~danceability~ = 0 and instead opt for the alternative hypothesis H~A~ that β~danceability~ ≠ 0 and is actually negative.
+:::
+
+::: {style="font-family: Georgia, serif;"}
+The next null hypothesis is that there is no difference in intercept for songs written in the major key and songs written in the minor key. Put differently, the intercepts for songs in the major and minor keys are the same.
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center;"}
+H~0~: β~minor~ = 0
+
+H~A~: β~minor~ ≠ 0
+:::
+
+::: {style="font-family: Georgia, serif;"}
+The difference in intercepts was negative (β~minor~ = -0.3365218). Given that the baseline group was major, this output suggests that songs in the minor key had a lower intercept, or fewer streams. Table 2 confirms this relationship as true, given that:
+
+-   The 95% confidence interval for the difference in intercept is completely negative \[-0.6222960, -0.0507475\]. This means that songs written in the minor key have an intercept as many as 0.6222 fewer streams (log transformed) or as little as 0.0507 fewer streams (log transformed) than those written in the major key. When un-log transformed, this means that songs with a danceability score of 0 written in the minor key were expected to receive anywhere from 11.0% to 76.1% fewer streams than that of songs with a danceability score of 0 written in the major key.
+
+-   The small p-value (p = 0.021) means that there is a low probability of having obtained results just as or more extreme as these if the null hypothesis were true. As such, we reject the null hypothesis H~0~ that β~minor~ = 0 and instead opt for the alternative hypothesis H~A~ that βminor ≠ 0 and is actually negative.
+:::
+
+::: {style="font-family: Georgia, serif;"}
+The final null hypothesis is that the relationship between danceability and streams is the same in the minor key as it is in the baseline group (major key).
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center;"}
+H~0~: β~danceability, minor~ = 0
+
+H~A~: β~danceability, minor~ ≠ 0
+:::
+
+::: {style="font-family: Georgia, serif;"}
+The difference in slope for songs in the minor key was positive (β~danceability, minor~ = 0.0043269). This output suggests that there was an alternative relationship between danceability and streams for songs in the minor key than there was for songs in the major key. Table 2 confirms this relationship, given that:
+
+-   The 95% confidence interval for the difference in slope is completely positive \[0.0001981, 0.0084557\]. This suggests that for every one percentage point increase in danceability for songs written in the minor key, there is an offset in slope for the associated streams that is as few as 0.0001 streams (log transformed) greater or as many as 0.0084 streams (log transformed) greater than that of songs written in the major key. When un-log transformed, this means that for every one percentage increase in danceability, songs in the minor key are expected to have a 0.01% to 0.8% less negative slope than songs written in the major key.
+
+-   The small p-value (p = 0.040) means that there is a low probability of having obtained results just as or more extreme as the observed ones if the null hypothesis were true. As such, we reject the null hypothesis H~0~ that β~danceability, minor~ = 0 and instead opt for the alternative hypothesis H~A~ that β~danceability, minor~ ≠ 0 and is actually positive.
+:::
+
+::: {style="font-family: Georgia, serif;"}
+## 3.5 Residual Analysis
+
+We plotted each of our predictors on the x-axis and our residual on the y-axis to help us to assess the legitimacy of our model. The residual plots for danceability and key both looked good, insofar that the data did not follow a systematic pattern such as a U-shaped polynomial curve (Figure 8).
+:::
+
+```{r}
+#predictions and residuals
+im_preds <- get_regression_points(int_lin_model) 
+#head(im_preds)
+```
+
+```{r warning=FALSE, message=FALSE}
+#plotting the residuals against numerical explanatory variable
+dance_resid <- ggplot(im_preds,
+       aes(x = danceability,
+           y = residual)) +
+  geom_jitter(alpha = 0.4, col = "#535353") +
+  geom_hline(yintercept = 0,
+             color = "#1ed760",
+             size = 1.05) +
+  theme_minimal() + 
+  labs(x = "Danceability",
+       y = "Residual") +
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+```
+
+```{r warning=FALSE, message=FALSE}
+#plotting the residuals against numerical explanatory variable
+key_resid <- ggplot(im_preds, 
+       aes(x = key, y = residual, fill = key)) +
+  geom_boxplot(show.legend = FALSE) +
+  scale_fill_manual(values = colors2) +
+  geom_hline(yintercept = 0,
+             color = "#1ed760",
+             size = 1.05) +
+  theme_minimal() + 
+  labs(x = "Key", 
+       y = "Residual") +
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+```
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 8. Plots of residuals against explanatory variables: danceability (left) and key (right).**
+:::
+
+```{r warning=FALSE, message=FALSE}
+#arranging distribution plots next to each other
+arranged_plots2 <- 
+  grid.arrange(dance_resid, key_resid, 
+               nrow = 1)
+```
+
+::: {style="font-family: Georgia, serif;"}
+We also plotted the fitted values against the residual to test for linearity. As can be seen in Figure 9, the relationship was adequately linear; it did not have any distinct shape that would undermine the suitability of a linear model.
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 9. Scatterplot of residuals against fitted values.**
+:::
+
+```{r}
+#plotting the residuals against fitted values 
+#diagnostics - linearity
+ggplot(im_preds,
+       aes(x = log_streams_hat,
+           y = residual)) +
+  geom_jitter(alpha = 0.4, col = "#535353") +
+  geom_hline(yintercept = 0,
+             color = "#1ed760",
+             size = 1.05) +
+  theme_minimal() + 
+  labs(x = "Fitted Values",
+       y = "Residual") +
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+```
+
+::: {style="font-family: Georgia, serif;"}
+Finally, we plotted a histogram of the residuals to ensure that they were normally distributed (Figure 10). The plot revealed that our model was a relatively good fit because there were just as many positive residuals as there were negative ones. That is, the model does not over-predict or under-predict in any uniform way.
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 10. Histogram of residuals for statistical model.**
+:::
+
+```{r}
+#plotting the distribution of residuals
+#diagnostics - normality
+ggplot(im_preds,
+       aes(x = residual)) +
+  geom_histogram(boundary = 0,
+                 binwidth = .25,
+                 color = "white",
+                 fill = "#1ed760") +
+  theme_minimal() + 
+  labs(x= "Residual",
+     y = "Count") +
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+```
+
+::: {style="font-family: Georgia, serif;"}
+Taken together, figures 8, 9, and 10 allow us to conclude that the conditions required for inference from our multiple linear regression have been satisfactorily met.
+:::
+
+::: {style="font-family: Georgia, serif;"}
+# 4. Discussion
+
+## 4.1 Conclusions
+
+We uncovered that there was a significant interaction between danceability, key, and streams, such that the number of streams a song received varied at different levels of each variable.
+
+At lower danceability levels, songs written in the major key received more streams on average. For example, songs in the major key with a danceability score of 23 were expected to have on average 464.5M streams, while songs in the minor key with a danceability score of 23 were expected to have on average 348.8M streams. At higher danceability levels, however, songs written in the minor key were expected to perform better on average. For example, songs in the minor key with a danceability score of 96 were expected to have on average 294.9M streams, while those in the major key were expected to have on average 245.9M streams. At danceability levels closer to the median of 69, songs written in the major and minor key showed less of a difference in streams, though songs in the major key still outperformed those in the minor key on average. Songs in the major key with a danceability score of 69 were expected to have on average 311.1M streams, while those in the minor key were expected to have on average 285.1M streams on average.
+
+Taken together, these findings suggest that artists looking to make it big should write a song in the **major key** with **low danceability** (i.e., with low rhythm and beat strength). If the artist would for some reason prefer to make an extremely dance-y tune, however, they may be better off writing the song in a minor key, though the importance of key may be less drastic at this danceability level. It is important to note that the difference in streams between major and minor key songs is much more pronounced at lower danceability levels. Therefore, our findings are more applicable to decisions around less upbeat songs rather than more upbeat ones. That is, there may be more flexibility in key selection for moderately to highly danceable songs, but for those with lower danceability, we recommend that artists seeking high stream counts write in the major key.
+
+Our findings were surprising insofar that they suggest high danceability is not always ideal. When we think of Pop Music, we tend to assume it is upbeat and has a strong beat. However, these findings suggest that many popular songs in 2023 do not fit this stereotype. In looking at some of the top performing songs in 2023 on an individual basis, this becomes immediately obvious. Many of the most popular songs were slow and sad - with artists like Lewis Capaldi having several top hits. This suggests the norms surrounding what makes a song popular may be changing, and this is an important factor to take into consideration for the artists of our time.
+
+## 4.2 Limitations
+
+There were several limitations to our study. First, we may not have entirely answered our original question of interest. Recall that our goal was to inform artists hoping to grow of the musical attributes that they should incorporate to boost song popularity. However, our data looked exclusively at songs with high (20M+) streams; there was no comparison to songs with lower streams. As such, our study may be more useful for artists with already high stream counts who are looking to continue their popularity streak rather than for small to medium sized artists looking to make it big for the first time. 
+
+Another limitation of our study is that one of the predictor variables, danceability, is an aggregate measure created internally by Spotify. Accordingly, we do not know if one part of the calculation for danceability (i.e., tempo) holds more weight than another, nor do we know if the measure is even an accurate reflection of how dance-able a song really is. While artists can apply our insights and attempt to make their songs less danceable, it is not quite as black-and-white of a recommendation as something like selecting between major and minor keys.
+
+A final limitation of our study is the element of time. While our data is recent, we only have songs as recent as August of 2023. As such, we technically do not have the most up-to-date picture of the music scene. Given that music taste is constantly evolving, by the time these findings are released, user preferences may have already changed; these results will only be valid for so long.
+
+## 4.3 Future Directions
+
+There are several potential routes for future research on this topic. First, as mentioned in the limitations, we would like to assess our same research question with a dataset that has information about both high- and low- streamed songs. This would enable us to better understand what sets high-performing songs apart from low-performing ones, rather than simply distinguishing among what makes certain high-performing songs perform better than other high-performing ones. 
+
+Another thing we would be interested in uncovering is whether the trends of today hold true beyond just the year of 2023. That is, does the same relationship between danceability, key, and streams exist on a longer time scale? Also, there are likely longer term patterns from the past 2-5 years that may not be evident in the looking at the past 8 months only that would be interesting to further investigate.
+
+Finally, our study looked at the influence of danceability and key on streams. However, there likely are a multitude of factors that influence song popularity, such as energy, valence (lyrical positivity), acousticness, tempo, song release date, and number of artists on the song, to name a few. In the future, we believe it would be worthwhile to look into how these musical attributes may affect streams. Not to mention, popularity, what we operationalized as streams, can be quantified in other ways (i.e., how many playlists a song has been added to), and it would be interesting to see whether danceability and key have a similar effect on these alternative measurements of popularity.
+:::
+
+::: {style="font-family: Georgia, serif;"}
+# 5. Citations and References
+
+1.  Peleg, N. (2023, June 29). Spotify Streams vs Spotify Monthly Listeners.<https://soundcamps.com/blog/spotify-streams-vs-spotify-monthly-listeners/>
+2.  Elgiriyewithana, N. (2023, August). Most Streamed Spotify Songs 2023. Kaggle.<https://www.kaggle.com/datasets/nelgiriyewithana/top-spotify-songs-2023>
+3.  UVA Library. (n.d.). Interpreting Log Transformations in a Linear Model. Retrieved December 1, 2023, from<https://library.virginia.edu/data/articles/interpreting-log-transformations-in-a-linear-model>
+:::
+
+::: {style="font-family: Georgia, serif;"}
+# 6. Appendix
+:::
+
+```{r warning=FALSE, message=FALSE}
+#testing first model - linear parallel slopes model
+par_lin_model <- lm(log_streams ~ danceability + key,
+         data = selspotify3)
+#tidy(par_lin_model, conf.int = TRUE)
+
+m1 <- ggpredict(par_lin_model,
+          terms = c("danceability", "key"))
+
+vis_par_lin_model <- plot(m1) +
+  labs(x = " ",
+       y = " ",
+       fill= " ",
+       color = " ",
+       title = "") +
+  scale_fill_manual(values = colors2) +
+  scale_color_manual(values = colors2) +
+  theme_minimal() + 
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+```
+
+```{r warning=FALSE, message=FALSE}
+#testing second model - parabolic parallel model
+par_pbla_model <- lm(log_streams ~ danceability + I(danceability^2) + key,
+         data = selspotify3)
+#tidy(par_pbla_model, conf.int = TRUE)
+
+m2 <- ggpredict(par_pbla_model,
+          terms = c("danceability", "key"))  
+
+vis_par_pbla_model <- plot(m2) +
+  labs(x = " ",
+       y = " ",
+       fill= " ",
+       color = " ",
+       title = " ") +
+  scale_fill_manual(values = colors2) +
+  scale_color_manual(values = colors2) +
+  theme_minimal() + 
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+```
+
+```{r warning=FALSE, message=FALSE}
+#third model without labels (og version can be found in section 3.2)
+vis_interaction_model3b <- plot(m3) +
+  labs(x = " ",
+       y = " ",
+       fill= " ",
+       color = " ",
+       title = "") +
+  scale_fill_manual(values = colors2) +
+  scale_color_manual(values = colors2) +
+  theme_minimal() + 
+  theme(text = element_text(family = "Gotham Bold", size = 12)) 
+```
+
+```{r warning=FALSE, message=FALSE}
+#testing fourth model - parabolic interaction model
+int_pbla_model <- lm(log_streams ~ (danceability + I(danceability^2)) * key,
+         data = selspotify3)
+#tidy(int_pbla_model, conf.int = TRUE)
+
+m4 <- ggpredict(int_pbla_model,
+          terms = c("danceability", "key")) 
+
+vis_int_pbla_model <- plot(m4) +
+  labs(x = " ",
+       y = " ",
+       fill= " ",
+       color = " ",
+       title = "") +
+  scale_fill_manual(values = colors2) +
+  scale_color_manual(values = colors2) +
+  theme_minimal() + 
+  theme(text = element_text(family = "Gotham Bold", size = 12))
+```
+
+::: {style="font-family: Georgia, serif;"}
+In plotting the four models, it appeared that there was an interaction taking place. This lead us to favor the linear and parabolic interaction models (models 3 and 4).
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Figure 11. Visual comparison: four models for streams (log transformed) as a function of danceability and key.**
+:::
+
+```{r}
+#axis labels for arranged plot
+x_axis_label <- textGrob("Danceability (as a %)", gp = gpar(fontsize = 12, fontface = "bold"))
+y_axis_label <- textGrob("Streams (log transformed)", rot = 90, gp = gpar(fontsize = 12, fontface = "bold"))
+
+#arranging the four models
+arranged_plots3 <- 
+  grid.arrange(
+    vis_par_lin_model, vis_par_pbla_model, vis_interaction_model3b, vis_int_pbla_model, 
+               nrow = 2,
+               bottom = x_axis_label,
+               left = y_axis_label)
+
+#adding titles for labeling each graph within arranged plot
+grid.text("Model 1 (parallel linear)", x = 0.05, y = 0.98, just = "left", gp = gpar(fontsize = 12, fontface = "bold"))
+grid.text("Model 2 (parallel parabolic)", x = 0.55, y = 0.98, just = "left", gp = gpar(fontsize = 12, fontface = "bold"))
+grid.text("Model 3 (linear interaction)", x = 0.05, y = 0.5, just = "left", gp = gpar(fontsize = 12, fontface = "bold"))
+grid.text("Model 4 (parabolic interaction)", x = 0.55, y = 0.5, just = "left", gp = gpar(fontsize = 12, fontface = "bold"))
+```
+
+```{r, include=FALSE}
+#determining which model is the best
+r1 <- get_regression_summaries(par_lin_model)
+kable(r1, format = "html", align = "c")
+
+r2 <- get_regression_summaries(par_pbla_model)
+kable(r2, format = "html", align = "c")
+
+r3 <- get_regression_summaries(int_lin_model)
+kable(r3, format = "html", align = "c")
+
+r4 <- get_regression_summaries(int_pbla_model)
+kable(r4, format = "html", align = "c")
+```
+
+::: {style="font-family: Georgia, serif;"}
+In comparing the AIC scores for each model, we confirmed that the linear interaction model was indeed the best, as its AIC score was the smallest.
+:::
+
+::: {style="font-family: Georgia, serif; text-align: center; font-size: 14px;"}
+**Table 3. AIC score comparison for four models.**
+:::
+
+```{r}
+aic <- AIC(par_lin_model,par_pbla_model,int_lin_model,int_pbla_model)
+kable(aic, format = "html", align = "c") 
+```
